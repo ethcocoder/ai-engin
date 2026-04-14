@@ -28,23 +28,18 @@ We have added a comprehensive `train.py` script. Execute your training script by
 ```
 This will automatically download the CIFAR10 dataset, start the training process, and save the best checkpoint to `checkpoints/best_autoencoder.pth`.
 
-## Step 5: Run Evaluation
-After training, you can visualize how well your system reconstructs the compressed data:
+## Step 5: The Paradox Cognitive Engine Demonstration
+The main paradigm shift for this project is treating latent vectors as a **cognitive space**. We have integrated the `LatentMemory` and `ReasoningEngine` into a unified pipeline. You can run the entire Paradox Engine demonstration via:
 ```bash
-!python src/eval.py --model_path checkpoints/best_autoencoder.pth --num_images 8
+!python src/paradox_demo.py --model_path checkpoints/best_autoencoder.pth
 ```
-This will output an image file named `reconstruction_comparison.png` that you can open to see the results!
+This script acts as the core controller and will:
+1. Load dataset samples.
+2. Mathematically compress them via the Encoder and store them into `LatentMemory`.
+3. Use the `ReasoningEngine` to **blend** two concepts (e.g., Object A + Object B) and **imagine** a new variation of a concept by exploring the latent space.
+4. Decode these newly synthesized vector math spaces back into images! 
 
-## Step 6: Test Latent Communication (Compression & Transmission Simulator)
-The main purpose of the engine is to encode to latent space and decode it on a "receiver" side.
-**Sender (Encoder):**
-```bash
-!python src/inference.py encode --input_image my_test_image.jpg --output_latent test_latent --model_path checkpoints/best_autoencoder.pth
-```
-**Receiver (Decoder):**
-```bash
-!python src/inference.py decode --input_latent test_latent.npy --output_image decoded_image.jpg --model_path checkpoints/best_autoencoder.pth
-```
+Open `paradox_engine_demo.png` when it is generated to view the AI's abstract thought process.
 
-## Step 7: Save your Checkpoints
+## Step 6: Save your Checkpoints
 After training, you can download the weights from the Colab file browser (on the left sidebar, click the Folder icon) under `ai-engin/checkpoints/` or configure Google Drive to save them directly.
