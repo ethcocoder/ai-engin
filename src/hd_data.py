@@ -1,4 +1,5 @@
 import os
+import urllib.request
 from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -30,8 +31,26 @@ def get_hd_dataloaders(image_dir='./hd_images', batch_size=4):
     """
     if not os.path.exists(image_dir):
         os.makedirs(image_dir)
-        print(f"[!] Please upload some .jpg images into the '{image_dir}' folder!")
-        return None
+        
+    # Check if folder is empty, if so, dynamically pull HD images from the web
+    existing_images = [f for f in os.listdir(image_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    if len(existing_images) == 0:
+        print("[*] Folder is empty! Downloading 4 random 1024x1024 HD test images from the internet...")
+        urls = [
+            "https://picsum.photos/seed/telecom1/1024/1024",
+            "https://picsum.photos/seed/telecom2/1024/1024",
+            "https://picsum.photos/seed/telecom3/1024/1024",
+            "https://picsum.photos/seed/telecom4/1024/1024"
+        ]
+        for i, url in enumerate(urls):
+            try:
+                file_path = os.path.join(image_dir, f"internet_hd_{i}.jpg")
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response, open(file_path, 'wb') as out_file:
+                    out_file.write(response.read())
+                print(f"    [+] Downloaded web image to {file_path}")
+            except Exception as e:
+                print(f"    [!] Failed to download: {e}")
 
     # We resize to a standard crisp multiple of 8 for the ResNet architecture
     transform = transforms.Compose([
