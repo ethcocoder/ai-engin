@@ -25,6 +25,20 @@ class Encoder(nn.Module):
         )
         self.flatten = nn.Flatten()
         self.fc = nn.Linear(128 * 4 * 4, latent_dim)
+        
+        self._init_weights()
+
+    def _init_weights(self):
+        """Applies Kaiming Initialization to CNN layers for optimal ReLU routing."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
@@ -56,6 +70,17 @@ class Decoder(nn.Module):
             nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=1, output_padding=1), # 3 x 32 x 32
             nn.Tanh() # Output in range [-1, 1] to match the normalization
         )
+        
+        self._init_weights()
+
+    def _init_weights(self):
+        """Applies Kaiming Initialization for intermediate layers."""
+        for m in self.modules():
+            if isinstance(m, nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.fc(x)

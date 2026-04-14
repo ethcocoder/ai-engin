@@ -19,7 +19,8 @@ def train(args: argparse.Namespace):
 
     model = Autoencoder(latent_dim=args.latent_dim).to(device)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5) # Added weight decay
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
@@ -47,18 +48,36 @@ def train(args: argparse.Namespace):
             pbar.set_postfix({'batch_loss': f"{loss.item():.4f}"})
             
         epoch_loss = running_loss / len(trainloader)
-        print(f"Epoch [{epoch+1}/{args.epochs}] Average Loss: {epoch_loss:.4f}")
         
-        # Save checkpoints conditionally
-        is_best = epoch_loss < best_loss
+        # Validation Loop
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for val_data in testloader:
+                val_images, _ = val_data
+                val_images = val_images.to(device)
+                val_outputs = model(val_images)
+                loss = criterion(val_outputs, val_images)
+                val_loss += loss.item()
+                
+        epoch_val_loss = val_loss / len(testloader)
+        
+        print(f"Epoch [{epoch+1}/{args.epochs}] -> Train Loss: {epoch_loss:.4f} | Val Loss: {epoch_val_loss:.4f}")
+        
+        # Adjust Learning Rate based on Validation Loss
+        scheduler.step(epoch_val_loss)
+        
+        # Save checkpoints conditionally based on VALIDATION loss (Best Practice)
+        is_best = epoch_val_loss < best_loss
         if is_best:
-            best_loss = epoch_loss
-            print(f"[*] Checkpoint saved! New best loss: {best_loss:.4f}")
+            best_loss = epoch_val_loss
+            print(f"[*] Checkpoint saved! New best Val Loss: {best_loss:.4f}")
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'loss': epoch_loss,
+                'train_loss': epoch_loss,
+                'val_loss': epoch_val_loss,
             }, os.path.join(args.checkpoint_dir, 'best_autoencoder.pth'))
             
         # Regular save

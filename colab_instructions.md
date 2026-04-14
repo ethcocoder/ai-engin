@@ -6,7 +6,7 @@ Since you have pushed this project to your Git repository, the easiest way to ru
 1. Go to [Google Colab](https://colab.research.google.com/).
 2. Create a **New Notebook**.
 3. Go to `Runtime` -> `Change runtime type` in the top menu.
-4. Select **T4 GPU** (or A100/V100 if available) from the Hardware accelerator dropdown and click **Save**. This drasticaly speeds up training.
+4. Select **T4 GPU** (or A100/V100 if available) from the Hardware accelerator dropdown and click **Save**. This drastically speeds up training.
 
 ## Step 2: Clone Your Repository in Colab
 In the first cell of your notebook, run the following command to clone your repository (replace `YOUR_GIT_REPO_URL` with your actual repo link):
