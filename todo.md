@@ -35,10 +35,10 @@
 
 ## Training
 
-- [ ] Define loss function (MSE)
-- [ ] Setup optimizer (Adam)
-- [ ] Train loop
-- [ ] Save model checkpoints
+- [x] Define loss function (MSE)
+- [x] Setup optimizer (Adam)
+- [x] Train loop
+- [x] Save model checkpoints
 
 ---
 
