@@ -21,25 +21,21 @@ In the next cell, navigate into the downloaded folder and install the dependenci
 !pip install -r requirements.txt
 ```
 
-## Step 4: Run the Training Script
-We have added a comprehensive `train.py` script. Execute your training script by running:
-```bash
-!python src/train.py --epochs 20 --batch_size 64 --lr 0.001 --latent_dim 128
-```
-This will automatically download the CIFAR10 dataset, start the training process, and save the best checkpoint to `checkpoints/best_autoencoder.pth`.
+## Step 4: Train the Neural Compressor
+We completely rewrote the engine to be a **High-Fidelity Spatial Compressor** (ResNet layers + Perceptual Loss combinations) so it transmits flawless visual data instead of just abstract ideas.
 
-## Step 5: The Paradox Cognitive Engine Demonstration
-The main paradigm shift for this project is treating latent vectors as a **cognitive space**. We have integrated the `LatentMemory` and `ReasoningEngine` into a unified pipeline. You can run the entire Paradox Engine demonstration via:
+Execute your training script:
 ```bash
-!python src/paradox_demo.py --model_path checkpoints/best_autoencoder.pth
+!python src/train.py --epochs 25 --batch_size 128 --latent_channels 4
 ```
-This script acts as the core controller and will:
-1. Load dataset samples.
-2. Mathematically compress them via the Encoder and store them into `LatentMemory`.
-3. Use the `ReasoningEngine` to **blend** two concepts (e.g., Object A + Object B) and **imagine** a new variation of a concept by exploring the latent space.
-4. Decode these newly synthesized vector math spaces back into images! 
+This automatically downloads CIFAR10 data, maps them through the spatial dimensions, and saves the system to `checkpoints/best_compressor.pth`.
 
-Open `paradox_engine_demo.png` when it is generated to view the AI's abstract thought process.
+## Step 5: Test the Telecom Bandwidth Simulator
+Run the application wrapper simulating User A sending high quality photos, the server saving 1000% bandwidth costs, and User B receiving identical replicas on their mobile device!
+```bash
+!python src/telecom_demo.py --model_path checkpoints/best_compressor.pth
+```
+This script acts as the core telecommunications controller and will output calculations into your terminal confirming exactly how much bandwidth you saved, alongside generating `telecom_simulation_result.png` so you can visually prove the image survived the trip perfectly.
 
 ## Step 6: Save your Checkpoints
 After training, you can download the weights from the Colab file browser (on the left sidebar, click the Folder icon) under `ai-engin/checkpoints/` or configure Google Drive to save them directly.

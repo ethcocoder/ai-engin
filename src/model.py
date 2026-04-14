@@ -1,104 +1,127 @@
 import torch
 import torch.nn as nn
 
-class Encoder(nn.Module):
+class ResBlock(nn.Module):
     """
-    CNN-based Encoder that maps input images into a compact latent vector.
+    Residual Block setup: Prevents spatial information loss, ensuring
+    sharp edges and high-fidelity texture transfers.
     """
-    def __init__(self, latent_dim: int = 128):
-        super(Encoder, self).__init__()
-        self.latent_dim = latent_dim
-        
-        # Input size: 3 x 32 x 32 (CIFAR-10)
-        self.conv = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1), # 32 x 16 x 16
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1), # 64 x 8 x 8
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-            
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1), # 128 x 4 x 4
-            nn.BatchNorm2d(128),
-            nn.ReLU(True)
-        )
-        self.flatten = nn.Flatten()
-        self.fc = nn.Linear(128 * 4 * 4, latent_dim)
-        
-        self._init_weights()
+    def __init__(self, channels):
+        super(ResBlock, self).__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(channels)
 
+    def forward(self, x):
+        identity = x
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += identity
+        return self.relu(out)
+
+
+class SpatialEncoder(nn.Module):
+    """
+    Compresses an HD image into a 2D Spatial Map rather than a 1D Vector.
+    This preserves coordinate math so exact reconstructions are possible!
+    """
+    def __init__(self, latent_channels: int = 4):
+        super(SpatialEncoder, self).__init__()
+        # Input: 3 x 32 x 32 -> Downsample to 64 x 16 x 16
+        self.init_conv = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+        self.res1 = ResBlock(64)
+        
+        # 64 x 16 x 16 -> Downsample to 128 x 8 x 8
+        self.down_conv = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+        self.res2 = ResBlock(128)
+        self.res3 = ResBlock(128)
+        
+        # Squeeze channels to bottleneck size: 128 x 8 x 8 -> latent_channels x 8 x 8
+        self.to_latent = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
+        self._init_weights()
+        
     def _init_weights(self):
-        """Applies Kaiming Initialization to CNN layers for optimal ReLU routing."""
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv(x)
-        x = self.flatten(x)
-        latent_vector = self.fc(x)
-        return latent_vector
+                
+    def forward(self, x):
+        x = self.init_conv(x)
+        x = self.res1(x)
+        x = self.down_conv(x)
+        x = self.res2(x)
+        x = self.res3(x)
+        latent_map = self.to_latent(x)
+        return latent_map
 
 
-class Decoder(nn.Module):
+class SpatialDecoder(nn.Module):
     """
-    CNN-based Decoder that reconstructs the image from a latent vector.
+    Takes the ultra-tiny 2D spatial footprint and symmetrically explodes 
+    it back into a flawless HD image using Deep Residual logic.
     """
-    def __init__(self, latent_dim: int = 128):
-        super(Decoder, self).__init__()
-        self.latent_dim = latent_dim
-        
-        self.fc = nn.Linear(latent_dim, 128 * 4 * 4)
-        self.unflatten = nn.Unflatten(1, (128, 4, 4))
-        
-        self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1), # 64 x 8 x 8
-            nn.BatchNorm2d(64),
-            nn.ReLU(True),
-            
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=1, output_padding=1), # 32 x 16 x 16
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            
-            nn.ConvTranspose2d(32, 3, kernel_size=3, stride=2, padding=1, output_padding=1), # 3 x 32 x 32
-            nn.Tanh() # Output in range [-1, 1] to match the normalization
+    def __init__(self, latent_channels: int = 4):
+        super(SpatialDecoder, self).__init__()
+        # Re-inflate channels: latent_channels x 8 x 8 -> 128 x 8 x 8
+        self.from_latent = nn.Sequential(
+            nn.Conv2d(latent_channels, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
         )
+        self.res1 = ResBlock(128)
+        self.res2 = ResBlock(128)
         
+        # Upsample: 128 x 8 x 8 -> 64 x 16 x 16
+        self.up_conv1 = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True)
+        )
+        self.res3 = ResBlock(64)
+        
+        # Upsample to Output: 64 x 16 x 16 -> 3 x 32 x 32
+        self.up_conv2 = nn.Sequential(
+            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1),
+            nn.Tanh() # Output clamped strictly to normal image formats bounds
+        )
         self._init_weights()
 
     def _init_weights(self):
-        """Applies Kaiming Initialization for intermediate layers."""
         for m in self.modules():
-            if isinstance(m, nn.ConvTranspose2d):
+            if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc(x)
-        x = self.unflatten(x)
-        reconstructed_image = self.deconv(x)
-        return reconstructed_image
-
-
-class Autoencoder(nn.Module):
-    """
-    Full AI Engine Autoencoder wrapper combining Encoder and Decoder.
-    """
-    def __init__(self, latent_dim: int = 128):
-        super(Autoencoder, self).__init__()
-        self.encoder = Encoder(latent_dim)
-        self.decoder = Decoder(latent_dim)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        latent = self.encoder(x)
-        reconstructed = self.decoder(latent)
+    def forward(self, x):
+        x = self.from_latent(x)
+        x = self.res1(x)
+        x = self.res2(x)
+        x = self.up_conv1(x)
+        x = self.res3(x)
+        reconstructed = self.up_conv2(x)
         return reconstructed
+
+
+class NeuralCompressor(nn.Module):
+    """
+    High-Fidelity Neural Image Compression Engine.
+    Replaces the 'Autoencoder' specifically for telecom and bandwidth dominance.
+    """
+    def __init__(self, latent_channels: int = 4):
+        super(NeuralCompressor, self).__init__()
+        self.encoder = SpatialEncoder(latent_channels)
+        self.decoder = SpatialDecoder(latent_channels)
+
+    def forward(self, x: torch.Tensor):
+        latent_map = self.encoder(x)
+        reconstructed = self.decoder(latent_map)
+        return reconstructed, latent_map

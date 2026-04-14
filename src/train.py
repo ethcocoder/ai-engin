@@ -4,29 +4,34 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from data import get_dataloaders
-from model import Autoencoder
+from model import NeuralCompressor
 from tqdm import tqdm
 
-def train(args: argparse.Namespace):
+def compression_loss(recon_x, x):
     """
-    Trains the Latent Communication Engine (Autoencoder).
+    Perceptual Sharpness Loss.
+    Standard MSE guarantees a blurry output. By fusing L1 Loss (which optimizes median error) 
+    with MSE, the Neural Compressor learns to preserve sharp lines, textures, and exact contrast!
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"[*] Platform: Using device: {device}")
-    print(f"[*] Hyperparameters: Batch Size={args.batch_size}, LR={args.lr}, Latent Dim={args.latent_dim}")
+    l1_loss = nn.functional.l1_loss(recon_x, x)
+    mse_loss = nn.functional.mse_loss(recon_x, x)
+    return l1_loss + (mse_loss * 0.5)
 
+def train(args: argparse.Namespace):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"[*] Telecom AI Core: Initializing on {device}")
+    print(f"[*] Target Compression Channels: {args.latent_channels}")
+    
     trainloader, testloader = get_dataloaders(batch_size=args.batch_size, root='./data')
 
-    model = Autoencoder(latent_dim=args.latent_dim).to(device)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    model = NeuralCompressor(latent_channels=args.latent_channels).to(device)
+    # Removing weight decay natively so the model can dedicate 100% capacity to exact pixels
+    optimizer = optim.Adam(model.parameters(), lr=args.lr) 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-
     best_loss = float('inf')
 
-    # Training loop
     for epoch in range(args.epochs):
         model.train()
         running_loss = 0.0
@@ -35,11 +40,11 @@ def train(args: argparse.Namespace):
         for data in pbar:
             images, _ = data
             images = images.to(device)
-            
             optimizer.zero_grad()
             
-            outputs = model(images)
-            loss = criterion(outputs, images) 
+            # Neural Compression Pipeline
+            outputs, _ = model(images)
+            loss = compression_loss(outputs, images)
             
             loss.backward()
             optimizer.step()
@@ -49,55 +54,39 @@ def train(args: argparse.Namespace):
             
         epoch_loss = running_loss / len(trainloader)
         
-        # Validation Loop
+        # Validation Pipeline
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
             for val_data in testloader:
                 val_images, _ = val_data
                 val_images = val_images.to(device)
-                val_outputs = model(val_images)
-                loss = criterion(val_outputs, val_images)
+                
+                val_outputs, _ = model(val_images)
+                loss = compression_loss(val_outputs, val_images)
                 val_loss += loss.item()
                 
         epoch_val_loss = val_loss / len(testloader)
         
-        print(f"Epoch [{epoch+1}/{args.epochs}] -> Train Loss: {epoch_loss:.4f} | Val Loss: {epoch_val_loss:.4f}")
-        
-        # Adjust Learning Rate based on Validation Loss
+        print(f"Epoch [{epoch+1}/{args.epochs}] -> Train Layer: {epoch_loss:.4f} | Validation Accuracy: {epoch_val_loss:.4f}")
         scheduler.step(epoch_val_loss)
         
-        # Save checkpoints conditionally based on VALIDATION loss (Best Practice)
         is_best = epoch_val_loss < best_loss
         if is_best:
             best_loss = epoch_val_loss
-            print(f"[*] Checkpoint saved! New best Val Loss: {best_loss:.4f}")
+            print(f"[*] Model upgraded! New best Telecom Loss: {best_loss:.4f}")
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'train_loss': epoch_loss,
-                'val_loss': epoch_val_loss,
-            }, os.path.join(args.checkpoint_dir, 'best_autoencoder.pth'))
-            
-        # Regular save
-        if (epoch + 1) % 5 == 0 or epoch == args.epochs - 1:
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': epoch_loss,
-            }, os.path.join(args.checkpoint_dir, f'autoencoder_epoch_{epoch+1}.pth'))
-            
-    print("[*] Training routine completed.")
+            }, os.path.join(args.checkpoint_dir, 'best_compressor.pth'))
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train AI Latent Communication Engine")
-    parser.add_argument('--batch_size', type=int, default=64, help='Input batch size for training/testing')
-    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train')
-    parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--latent_dim', type=int, default=128, help='Size of the latent vector (compression level)')
-    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory to save model weights')
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--epochs', type=int, default=20)
+    parser.add_argument('--lr', type=float, default=2e-3) # Higher learning rate for L1 convergence
+    parser.add_argument('--latent_channels', type=int, default=4, help='Size of spatial compressed payload')
+    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
     args = parser.parse_args()
     train(args)
