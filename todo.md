@@ -2,10 +2,10 @@
 
 ## Setup
 
-- [ ] Create project folder
-- [ ] Initialize Git repository
-- [ ] Setup Python environment
-- [ ] Install dependencies (torch, torchvision, numpy)
+- [x] Create project folder
+- [x] Initialize Git repository
+- [x] Setup Python environment
+- [x] Install dependencies (torch, torchvision, numpy)
 
 ---
 
