@@ -11,25 +11,25 @@
 
 ## Data
 
-- [ ] Download dataset (CIFAR10 / custom)
-- [ ] Preprocess images (resize, normalize)
-- [ ] Create dataloader
+- [x] Download dataset (CIFAR10 / custom)
+- [x] Preprocess images (resize, normalize)
+- [x] Create dataloader
 
 ---
 
 ## Model - Encoder
 
-- [ ] Build CNN encoder
-- [ ] Add convolution layers
-- [ ] Output latent vector
+- [x] Build CNN encoder
+- [x] Add convolution layers
+- [x] Output latent vector
 
 ---
 
 ## Model - Decoder
 
-- [ ] Build CNN decoder
-- [ ] Reconstruct image
-- [ ] Match input size
+- [x] Build CNN decoder
+- [x] Reconstruct image
+- [x] Match input size
 
 ---
 
