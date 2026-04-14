@@ -61,7 +61,8 @@ def run_paradox_engine(args):
 
     print(f"\n[*] Executing Latent Reasoning (Imagination)...")
     # Imagination (Generating variations via structured exploration)
-    imagined_latent = reasoning_engine.imagine(concept_a, noise_scale=1.5) # Explore 1.5 deviations away
+    # Lowered noise_scale to 0.1 so it doesn't shatter the vector completely
+    imagined_latent = reasoning_engine.imagine(concept_a, noise_scale=0.1)
     print(f"    [+] Applied imagination noise to base concept {name_a}")
     
     print("\n[*] Reverting Cognitive Latent Space to Visual Representation (Decoding)...")
