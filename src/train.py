@@ -20,7 +20,7 @@ def train(args: argparse.Namespace):
     model = Autoencoder(latent_dim=args.latent_dim).to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
