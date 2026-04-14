@@ -44,26 +44,26 @@
 
 ## Evaluation
 
-- [ ] Visualize reconstructed images
-- [ ] Compare original vs output
-- [ ] Measure loss
+- [x] Visualize reconstructed images
+- [x] Compare original vs output
+- [x] Measure loss
 
 ---
 
 ## Compression
 
-- [ ] Reduce latent size
-- [ ] Test multiple dimensions
-- [ ] Store latent as file
-- [ ] Measure size in KB
+- [x] Reduce latent size
+- [x] Test multiple dimensions
+- [x] Store latent as file
+- [x] Measure size in KB
 
 ---
 
 ## Communication
 
-- [ ] Serialize latent vector
-- [ ] Send via file or API
-- [ ] Decode on receiver
+- [x] Serialize latent vector
+- [x] Send via file or API
+- [x] Decode on receiver
 
 ---
 
