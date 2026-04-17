@@ -4,28 +4,30 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from data import get_dataloaders
-from model import NeuralCompressor
+from model import LatentGenesisCore
 from tqdm import tqdm
 
-def compression_loss(recon_x, x):
+def compression_loss(recon_x, x, mu, logvar):
     """
-    Perceptual Sharpness Loss.
-    Standard MSE guarantees a blurry output. By fusing L1 Loss (which optimizes median error) 
-    with MSE, the Neural Compressor learns to preserve sharp lines, textures, and exact contrast!
+    Paradox Generative Loss.
+    Fuses Perceptual Purity (L1/MSE) with Information Pressure (KLD).
     """
     l1_loss = nn.functional.l1_loss(recon_x, x)
     mse_loss = nn.functional.mse_loss(recon_x, x)
-    return l1_loss + (mse_loss * 0.5)
+    
+    # KL Divergence: Forces the manifold into a coherent Gaussian Superposition
+    kld_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    
+    # Balance: Perception (1.0) + Reconstruction (0.5) + Entropy Pressure (0.01)
+    return l1_loss + (mse_loss * 0.5) + (kld_loss * 0.01)
 
 def train(args: argparse.Namespace):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"[*] Telecom AI Core: Initializing on {device}")
-    print(f"[*] Target Compression Channels: {args.latent_channels}")
+    print(f"[*] Paradox Genesis Core: Initializing on {device}")
     
     trainloader, testloader = get_dataloaders(batch_size=args.batch_size, root='./data')
 
-    model = NeuralCompressor(latent_channels=args.latent_channels).to(device)
-    # Removing weight decay natively so the model can dedicate 100% capacity to exact pixels
+    model = LatentGenesisCore(latent_channels=args.latent_channels).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr) 
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
 
@@ -42,9 +44,9 @@ def train(args: argparse.Namespace):
             images = images.to(device)
             optimizer.zero_grad()
             
-            # Neural Compression Pipeline
-            outputs, _ = model(images)
-            loss = compression_loss(outputs, images)
+            # Paradox Synthesis Pipeline
+            outputs, mu, logvar = model(images)
+            loss = compression_loss(outputs, images, mu, logvar)
             
             loss.backward()
             optimizer.step()
@@ -62,24 +64,24 @@ def train(args: argparse.Namespace):
                 val_images, _ = val_data
                 val_images = val_images.to(device)
                 
-                val_outputs, _ = model(val_images)
-                loss = compression_loss(val_outputs, val_images)
+                val_outputs, mu, logvar = model(val_images)
+                loss = compression_loss(val_outputs, val_images, mu, logvar)
                 val_loss += loss.item()
                 
         epoch_val_loss = val_loss / len(testloader)
         
-        print(f"Epoch [{epoch+1}/{args.epochs}] -> Train Layer: {epoch_loss:.4f} | Validation Accuracy: {epoch_val_loss:.4f}")
+        print(f"Epoch [{epoch+1}/{args.epochs}] -> Genesis Loss: {epoch_loss:.4f} | Validation Fidelity: {epoch_val_loss:.4f}")
         scheduler.step(epoch_val_loss)
         
         is_best = epoch_val_loss < best_loss
         if is_best:
             best_loss = epoch_val_loss
-            print(f"[*] Model upgraded! New best Telecom Loss: {best_loss:.4f}")
+            print(f"[*] Core upgraded! New best Paradox Genesis Loss: {best_loss:.4f}")
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-            }, os.path.join(args.checkpoint_dir, 'best_compressor.pth'))
+            }, os.path.join(args.checkpoint_dir, 'best_genesis_core.pth'))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

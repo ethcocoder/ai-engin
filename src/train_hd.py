@@ -1,10 +1,17 @@
 import os
 import torch
 import torch.optim as optim
+import sys
+from pathlib import Path
 from hd_data import get_hd_dataloaders
-from model import NeuralCompressor
+from model import LatentGenesisCore
 from train import compression_loss
 import argparse
+
+# Advanced Pathing Protocol
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
 
 def train_hd(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -14,7 +21,7 @@ def train_hd(args):
     if loader is None: return
 
     # Our NeuralCompressor is Fully Convolutional! It scales dynamically to HD!
-    model = NeuralCompressor(latent_channels=args.latent_channels).to(device)
+    model = LatentGenesisCore(latent_channels=args.latent_channels).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -29,17 +36,17 @@ def train_hd(args):
             images = images.to(device)
             optimizer.zero_grad()
             
-            outputs, _ = model(images)
-            loss = compression_loss(outputs, images)
+            outputs, mu, logvar = model(images)
+            loss = compression_loss(outputs, images, mu, logvar)
             
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
             
-        print(f"Epoch [{epoch+1}/{args.epochs}] -> HD Error: {(running_loss/len(loader)):.4f}")
+        print(f"Epoch [{epoch+1}/{args.epochs}] -> HD Genesis Error: {(running_loss/len(loader)):.4f}")
 
-    print("[*] HD Overfit Complete. Saving deployment architecture.")
-    torch.save({'model_state_dict': model.state_dict()}, os.path.join(args.checkpoint_dir, 'hd_compressor.pth'))
+    print("[*] HD Genesis Complete. Saving deployment architecture.")
+    torch.save({'model_state_dict': model.state_dict()}, os.path.join(args.checkpoint_dir, 'hd_genesis_core.pth'))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

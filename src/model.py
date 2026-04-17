@@ -1,127 +1,173 @@
 import torch
 import torch.nn as nn
+import numpy as np
+import os
+import sys
+from pathlib import Path
+
+# Advanced Pathing Protocol: 
+# Dynamically appending the source root to ensure Sovereign Substrate resolution.
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
+
+try:
+    # Attempt absolute package import first
+    from qau_qvs.core.qvs import QVS
+    from qau_qvs.core.asc import ASC
+except ImportError:
+    # Fallback to explicit relative if strictly within a package context
+    from .qau_qvs.core.qvs import QVS
+    from .qau_qvs.core.asc import ASC
 
 class ResBlock(nn.Module):
     """
-    Residual Block setup: Prevents spatial information loss, ensuring
-    sharp edges and high-fidelity texture transfers.
+    Paradox Residual Block: The topological anchor.
     """
     def __init__(self, channels):
         super(ResBlock, self).__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(channels)
+        )
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(channels)
 
     def forward(self, x):
-        identity = x
-        out = self.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += identity
-        return self.relu(out)
+        return self.relu(x + self.conv(x))
 
-
-class SpatialEncoder(nn.Module):
+class SemanticEncoder(nn.Module):
     """
-    Compresses an HD image into a 2D Spatial Map rather than a 1D Vector.
-    This preserves coordinate math so exact reconstructions are possible!
+    Paradox Semantic Encoder: Resolves images into Superpositions.
     """
     def __init__(self, latent_channels: int = 4):
-        super(SpatialEncoder, self).__init__()
-        # Input: 3 x 32 x 32 -> Downsample to 64 x 16 x 16
-        self.init_conv = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1),
+        super(SemanticEncoder, self).__init__()
+        self.layers = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            ResBlock(32),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True)
-        )
-        self.res1 = ResBlock(64)
-        
-        # 64 x 16 x 16 -> Downsample to 128 x 8 x 8
-        self.down_conv = nn.Sequential(
+            nn.ReLU(inplace=True),
+            ResBlock(64),
             nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            ResBlock(128)
         )
-        self.res2 = ResBlock(128)
-        self.res3 = ResBlock(128)
-        
-        # Squeeze channels to bottleneck size: 128 x 8 x 8 -> latent_channels x 8 x 8
-        self.to_latent = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
-        self._init_weights()
-        
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                
+        self.mu = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
+        self.logvar = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
+
     def forward(self, x):
-        x = self.init_conv(x)
-        x = self.res1(x)
-        x = self.down_conv(x)
-        x = self.res2(x)
-        x = self.res3(x)
-        latent_map = self.to_latent(x)
-        return latent_map
+        x = self.layers(x)
+        return self.mu(x), self.logvar(x)
 
-
-class SpatialDecoder(nn.Module):
+class GenesisDecoder(nn.Module):
     """
-    Takes the ultra-tiny 2D spatial footprint and symmetrically explodes 
-    it back into a flawless HD image using Deep Residual logic.
+    Paradox Genesis Decoder: The Collapse Mechanism.
     """
     def __init__(self, latent_channels: int = 4):
-        super(SpatialDecoder, self).__init__()
-        # Re-inflate channels: latent_channels x 8 x 8 -> 128 x 8 x 8
-        self.from_latent = nn.Sequential(
+        super(GenesisDecoder, self).__init__()
+        self.expand = nn.Sequential(
             nn.Conv2d(latent_channels, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            ResBlock(128)
         )
-        self.res1 = ResBlock(128)
-        self.res2 = ResBlock(128)
-        
-        # Upsample: 128 x 8 x 8 -> 64 x 16 x 16
-        self.up_conv1 = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True)
+        self.up1 = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            ResBlock(32)
         )
-        self.res3 = ResBlock(64)
-        
-        # Upsample to Output: 64 x 16 x 16 -> 3 x 32 x 32
-        self.up_conv2 = nn.Sequential(
-            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1),
-            nn.Tanh() # Output clamped strictly to normal image formats bounds
+        self.up2 = nn.Sequential(
+            nn.Conv2d(32, 128, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            ResBlock(32)
         )
-        self._init_weights()
-
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        self.up3 = nn.Sequential(
+            nn.Conv2d(32, 48, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.BatchNorm2d(12),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(12, 3, kernel_size=3, padding=1),
+            nn.Tanh()
+        )
 
     def forward(self, x):
-        x = self.from_latent(x)
-        x = self.res1(x)
-        x = self.res2(x)
-        x = self.up_conv1(x)
-        x = self.res3(x)
-        reconstructed = self.up_conv2(x)
-        return reconstructed
+        x = self.expand(x)
+        x = self.up1(x)
+        x = self.up2(x)
+        x = self.up3(x)
+        return x
 
-
-class NeuralCompressor(nn.Module):
+class LatentGenesisCore(nn.Module):
     """
-    High-Fidelity Neural Image Compression Engine.
-    Replaces the 'Autoencoder' specifically for telecom and bandwidth dominance.
+    The Soul of Paradox: Quantum-Neural Genesis.
+    Fuses Classical Silicon Learning with Quantum Virtual Substrate Logic.
     """
     def __init__(self, latent_channels: int = 4):
-        super(NeuralCompressor, self).__init__()
-        self.encoder = SpatialEncoder(latent_channels)
-        self.decoder = SpatialDecoder(latent_channels)
+        super(LatentGenesisCore, self).__init__()
+        self.encoder = SemanticEncoder(latent_channels)
+        self.decoder = GenesisDecoder(latent_channels)
+        self.qvs = QVS() # The Quantum Engine living inside the Neural Core
+
+    def quantum_superposition(self, mu, logvar):
+        """
+        Active Quantum Integration:
+        1. Encodes the 'Latent Energy' (mean) into the QVS.
+        2. Performs a Superposition + Collapse cycle to determine Phase Bias.
+        3. Modulates the neural manifold with the resulting Quantum Outcome.
+        """
+        batch_size = mu.shape[0]
+        std = torch.exp(0.5 * logvar)
+        
+        if self.training:
+            # We perform a Symbolic Quantum Measurement for each batch item
+            # to determine the 'Phase Weave' of the entire manifold.
+            phase_biases = []
+            for i in range(batch_size):
+                # Map the mean signal to a symbolic 4-state quantum basis
+                # (Representing 4 quadrants of the complex Hilbert space)
+                asc_id = self.qvs.create_asc(size=2)
+                self.qvs.SUPERPOSE(asc_id, [(0,0), (0,1), (1,0), (1,1)])
+                
+                # Use the mean latent intensity to 'WEAVE' a phase shift
+                intensity = torch.mean(mu[i]).item()
+                self.qvs.WEAVE(asc_id, phase_angle=intensity * np.pi)
+                
+                # COLLAPSE the state to get a physical phase-outcome
+                outcome = self.qvs.COLLAPSE(asc_id)
+                
+                # Map the binary outcome (e.g. (1,0)) back to a scalar bias
+                bias = 1.0 if sum(outcome) % 2 == 0 else -1.0
+                phase_biases.append(bias)
+                
+                # Cleanup quantum resources
+                self.qvs.delete_asc(asc_id)
+            
+            bias_tensor = torch.tensor(phase_biases, device=mu.device).view(batch_size, 1, 1, 1)
+            eps = torch.randn_like(std) * bias_tensor
+        else:
+            eps = torch.zeros_like(std)
+            
+        return mu + eps * std
 
     def forward(self, x: torch.Tensor):
-        latent_map = self.encoder(x)
-        reconstructed = self.decoder(latent_map)
-        return reconstructed, latent_map
+        mu, logvar = self.encoder(x)
+        
+        # Transmuting Normal Latents into Quantum Superpositions
+        z = self.quantum_superposition(mu, logvar)
+        
+        # Neural Bit-Depth Quantization (Information Pressure)
+        # This simulates the transfer across the Aether Mesh
+        z = z + (torch.round(z * 127.5) / 127.5 - z).detach()
+        
+        reconstructed = self.decoder(z)
+        return reconstructed, mu, logvar

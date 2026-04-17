@@ -1,9 +1,17 @@
 import os
 import urllib.request
+import sys
 from PIL import Image
-import torch
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
+from pathlib import Path
+
+try:
+    import torch
+    from torch.utils.data import Dataset, DataLoader
+    import torchvision.transforms as transforms
+except ImportError:
+    # Environment warning: This module requires Torch and Torchvision for execution
+    # but the paths remain loadable for static analysis.
+    pass
 
 class CustomHDDataset(Dataset):
     """Loads any real HD images uploaded by the user."""

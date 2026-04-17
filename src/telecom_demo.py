@@ -1,11 +1,18 @@
 import torch
 import matplotlib.pyplot as plt
-from model import NeuralCompressor
+import os
+import sys
+from pathlib import Path
+from model import LatentGenesisCore
 import torchvision.transforms as transforms
 import torchvision
 from torch.utils.data import DataLoader
 import argparse
-import sys
+
+# Advanced Pathing Protocol
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
 
 def unnorm(img):
     img = img * 0.5 + 0.5
@@ -15,14 +22,15 @@ def run_bandwidth_simulation(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[*] Initializing Telecom Neural Compression Simulator on {device}\n")
 
-    # 1. Initialize High-Fidelity Telecom Layer
-    model = NeuralCompressor(latent_channels=args.latent_channels).to(device)
+    # 1. Initialize Paradox Genesis Layer
+    model = LatentGenesisCore(latent_channels=args.latent_channels).to(device)
     checkpoint = torch.load(args.model_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
     # 2. Get sample data (simulating User A's photo gallery)
     transform = transforms.Compose([
+        transforms.Resize((256, 256)),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -34,24 +42,28 @@ def run_bandwidth_simulation(args):
     print("[USER A: SENDER MOBILE DEVICE]")
     original_bytes = images[0].element_size() * images[0].nelement()
     print(f"[-] Image Original Dimensions: {list(images[0].shape)}")
-    print(f"[-] Bytes sent typically (Uncompressed): {original_bytes} bytes")
+    print(f"[-] Bytes sent typically (Uncompressed): {original_bytes:,} bytes")
 
     # Encode (Compressing locally on Mobile A)
     encoded_latents = []
     with torch.no_grad():
         for i in range(4):
-            latent_map = model.encoder(images[i].unsqueeze(0))
-            encoded_latents.append(latent_map)
+            # Encode to Superposition
+            mu, _ = model.encoder(images[i].unsqueeze(0))
+            # Quantize for Transmission (1 byte per value)
+            q_latent = torch.round(mu * 127.5) / 127.5
+            encoded_latents.append(q_latent)
             
     print("\n[TELECOM GATEWAY: TRANSMISSION]")
-    payload_bytes = encoded_latents[0].element_size() * encoded_latents[0].nelement()
+    # Real-world transmission is 8-bit (1 byte per element)
+    payload_bytes = encoded_latents[0].nelement() * 1 
     compression_ratio = original_bytes / payload_bytes
     print(f"[-] Transmitted Neural Payload Dimensions: {list(encoded_latents[0].squeeze(0).shape)}")
-    print(f"[-] Server Bandwidth Usage (Compressed): {payload_bytes} bytes")
+    print(f"[-] Server Bandwidth Usage (Compressed & Quantized): {payload_bytes:,} bytes")
     print(f"[-] *** PROFIT ACHIEVED: {compression_ratio:.1f}X REDUCTION IN BANDWIDTH COSTS! ***")
 
     print("\n[USER B: RECEIVER MOBILE DEVICE]")
-    print("[-] Decoding Payload locally...")
+    print("[-] Collapsing & Decoding Payload locally...")
     decoded_images = []
     with torch.no_grad():
         for i in range(4):

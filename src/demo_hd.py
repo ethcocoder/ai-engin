@@ -1,16 +1,23 @@
 import os
 import torch
 import matplotlib.pyplot as plt
-from model import NeuralCompressor
+import sys
+from pathlib import Path
+from model import LatentGenesisCore
 from hd_data import get_hd_dataloaders
 import argparse
+
+# Advanced Pathing Protocol
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.append(str(CURRENT_DIR))
 
 def unnorm(img):
     return torch.clamp(img * 0.5 + 0.5, 0, 1)
 
 def run_hd_simulation(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = NeuralCompressor(latent_channels=args.latent_channels).to(device)
+    model = LatentGenesisCore(latent_channels=args.latent_channels).to(device)
     checkpoint = torch.load(args.model_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -26,7 +33,7 @@ def run_hd_simulation(args):
     encoded_latents = []
     with torch.no_grad():
         for i in range(len(images)):
-            encoded_latents.append(model.encoder(images[i].unsqueeze(0)))
+            encoded_latents.append(model.encoder(images[i].unsqueeze(0))[0])
             
     payload_bytes = encoded_latents[0].element_size() * encoded_latents[0].nelement()
     compression_ratio = original_bytes / payload_bytes
