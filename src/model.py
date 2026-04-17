@@ -68,31 +68,37 @@ class SemanticEncoder(nn.Module):
 class GenesisDecoder(nn.Module):
     """
     Paradox Genesis Decoder: The Collapse Mechanism.
+    Upgraded: Wider channel paths for higher fidelity reconstruction.
     """
     def __init__(self, latent_channels: int = 4):
         super(GenesisDecoder, self).__init__()
+        # Expand latent to a rich 256-channel manifold
         self.expand = nn.Sequential(
-            nn.Conv2d(latent_channels, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(latent_channels, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
-            ResBlock(128)
+            ResBlock(256),
+            ResBlock(256)
         )
+        # PixelShuffle(2): 256 -> 64 channels, 2x spatial
         self.up1 = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.PixelShuffle(2),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            ResBlock(32)
+            ResBlock(64)
         )
+        # PixelShuffle(2): 256 -> 64 channels, 2x spatial
         self.up2 = nn.Sequential(
-            nn.Conv2d(32, 128, kernel_size=3, padding=1),
+            nn.Conv2d(64, 256, kernel_size=3, padding=1),
             nn.PixelShuffle(2),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            ResBlock(32)
+            ResBlock(64)
         )
+        # PixelShuffle(2): 48 -> 12 -> 3 channels, 2x spatial
         self.up3 = nn.Sequential(
-            nn.Conv2d(32, 48, kernel_size=3, padding=1),
+            nn.Conv2d(64, 48, kernel_size=3, padding=1),
             nn.PixelShuffle(2),
             nn.BatchNorm2d(12),
             nn.ReLU(inplace=True),
@@ -155,7 +161,8 @@ class LatentGenesisCore(nn.Module):
             bias_tensor = torch.tensor(phase_biases, device=mu.device).view(batch_size, 1, 1, 1)
             eps = torch.randn_like(std) * bias_tensor
         else:
-            eps = torch.zeros_like(std)
+            # At inference: sample with low-temperature noise for diversity
+            eps = torch.randn_like(std) * 0.1
             
         return mu + eps * std
 
@@ -165,9 +172,10 @@ class LatentGenesisCore(nn.Module):
         # Transmuting Normal Latents into Quantum Superpositions
         z = self.quantum_superposition(mu, logvar)
         
-        # Neural Bit-Depth Quantization (Information Pressure)
-        # This simulates the transfer across the Aether Mesh
-        z = z + (torch.round(z * 127.5) / 127.5 - z).detach()
+        # Soft Quantization: Straight-Through Estimator with 8-bit precision
+        # Clamp latents to [-1, 1] first to prevent quantization explosion
+        z_clamped = torch.clamp(z, -1.0, 1.0)
+        z = z_clamped + (torch.round(z_clamped * 127.5) / 127.5 - z_clamped).detach()
         
         reconstructed = self.decoder(z)
         return reconstructed, mu, logvar
