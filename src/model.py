@@ -1,181 +1,265 @@
+"""
+model.py — Paradox Genesis Core Architecture
+=============================================
+Implements the Quantum-Neural Variational Autoencoder (QNVAE) for
+ultra-efficient image compression across the Aether Mesh network.
+
+Architecture:
+    SemanticEncoder  → encodes image into (mu, logvar) latent maps
+    GenesisDecoder   → reconstructs image from quantized latent z
+    LatentGenesisCore → full VAE with QVS-modulated reparameterization
+"""
+
+import sys
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import os
-import sys
 from pathlib import Path
+from typing import Tuple
 
-# Advanced Pathing Protocol: 
-# Dynamically appending the source root to ensure Sovereign Substrate resolution.
-CURRENT_DIR = Path(__file__).resolve().parent
-if str(CURRENT_DIR) not in sys.path:
-    sys.path.append(str(CURRENT_DIR))
+# ── Advanced Pathing Protocol ────────────────────────────────────────────────
+# Ensures the QAU substrate is always resolvable regardless of working directory.
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 try:
-    # Attempt absolute package import first
     from qau_qvs.core.qvs import QVS
-    from qau_qvs.core.asc import ASC
 except ImportError:
-    # Fallback to explicit relative if strictly within a package context
-    from .qau_qvs.core.qvs import QVS
-    from .qau_qvs.core.asc import ASC
+    from .qau_qvs.core.qvs import QVS  # type: ignore[no-redef]
+
+
+# ── Building Block ───────────────────────────────────────────────────────────
 
 class ResBlock(nn.Module):
     """
-    Paradox Residual Block: The topological anchor.
+    Paradox Residual Block — the topological anchor of the Genesis pipeline.
+
+    A standard pre-activation residual connection stabilises gradient flow
+    through deep encoder/decoder stacks.
+
+    Args:
+        channels: Number of convolutional feature channels (in == out).
     """
-    def __init__(self, channels):
-        super(ResBlock, self).__init__()
+
+    def __init__(self, channels: int) -> None:
+        super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(channels)
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
         )
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.relu(x + self.conv(x))
+
+
+# ── Encoder ──────────────────────────────────────────────────────────────────
 
 class SemanticEncoder(nn.Module):
     """
-    Paradox Semantic Encoder: Resolves images into Superpositions.
+    Paradox Semantic Encoder — collapses an image into a Quantum Superposition.
+
+    Applies three stride-2 convolutions to downsample 32×32 → 4×4, then
+    projects to (mu, logvar) maps representing the latent Gaussian distribution.
+
+    Args:
+        latent_channels: Number of channels in the bottleneck latent map.
+
+    Input shape:  (B, 3, H, W)
+    Output shape: (mu, logvar) each of shape (B, latent_channels, H/8, W/8)
     """
-    def __init__(self, latent_channels: int = 4):
-        super(SemanticEncoder, self).__init__()
+
+    def __init__(self, latent_channels: int = 4) -> None:
+        super().__init__()
         self.layers = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1),
+            # 3 → 32 ch, spatial /2
+            nn.Conv2d(3, 32, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             ResBlock(32),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            # 32 → 64 ch, spatial /2
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             ResBlock(64),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
+            # 64 → 128 ch, spatial /2
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            ResBlock(128)
+            ResBlock(128),
         )
-        self.mu = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
+        self.mu     = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
         self.logvar = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
 
-    def forward(self, x):
-        x = self.layers(x)
-        return self.mu(x), self.logvar(x)
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        h = self.layers(x)
+        return self.mu(h), self.logvar(h)
+
+
+# ── Decoder ──────────────────────────────────────────────────────────────────
 
 class GenesisDecoder(nn.Module):
     """
-    Paradox Genesis Decoder: The Collapse Mechanism.
-    Upgraded: Wider channel paths for higher fidelity reconstruction.
+    Paradox Genesis Decoder — collapses the quantum latent back into a physical image.
+
+    Uses PixelShuffle for sub-pixel upsampling (no checkerboard artifacts),
+    with a wide 256-channel manifold for high-fidelity reconstruction.
+
+    PixelShuffle(r) math: (B, C*r², H, W) → (B, C, H*r, W*r)
+      up1: (B, 256, 4, 4)  → (B, 64, 8, 8)    [r=2, C=64]
+      up2: (B, 256, 8, 8)  → (B, 64, 16, 16)  [r=2, C=64]
+      up3: (B,  48, 16,16) → (B, 12, 32, 32)  [r=2, C=12] → (B, 3, 32, 32)
+
+    Args:
+        latent_channels: Must match the encoder's latent_channels.
+
+    Input shape:  (B, latent_channels, H/8, W/8)
+    Output shape: (B, 3, H, W) with values in [-1, 1]
     """
-    def __init__(self, latent_channels: int = 4):
-        super(GenesisDecoder, self).__init__()
-        # Expand latent to a rich 256-channel manifold
+
+    def __init__(self, latent_channels: int = 4) -> None:
+        super().__init__()
+        # Expand latent to rich 256-channel manifold
         self.expand = nn.Sequential(
-            nn.Conv2d(latent_channels, 256, kernel_size=3, padding=1),
+            nn.Conv2d(latent_channels, 256, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             ResBlock(256),
-            ResBlock(256)
+            ResBlock(256),
         )
-        # PixelShuffle(2): 256 -> 64 channels, 2x spatial
+        # 256ch → PixelShuffle(2) → 64ch, spatial ×2
         self.up1 = nn.Sequential(
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=False),
             nn.PixelShuffle(2),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            ResBlock(64)
+            ResBlock(64),
         )
-        # PixelShuffle(2): 256 -> 64 channels, 2x spatial
+        # 64ch → 256ch → PixelShuffle(2) → 64ch, spatial ×2
         self.up2 = nn.Sequential(
-            nn.Conv2d(64, 256, kernel_size=3, padding=1),
+            nn.Conv2d(64, 256, kernel_size=3, padding=1, bias=False),
             nn.PixelShuffle(2),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            ResBlock(64)
+            ResBlock(64),
         )
-        # PixelShuffle(2): 48 -> 12 -> 3 channels, 2x spatial
+        # 64ch → 48ch → PixelShuffle(2) → 12ch → 3ch, spatial ×2
         self.up3 = nn.Sequential(
-            nn.Conv2d(64, 48, kernel_size=3, padding=1),
+            nn.Conv2d(64, 48, kernel_size=3, padding=1, bias=False),
             nn.PixelShuffle(2),
             nn.BatchNorm2d(12),
             nn.ReLU(inplace=True),
             nn.Conv2d(12, 3, kernel_size=3, padding=1),
-            nn.Tanh()
+            nn.Tanh(),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.expand(x)
         x = self.up1(x)
         x = self.up2(x)
         x = self.up3(x)
         return x
 
+
+# ── Full Model ───────────────────────────────────────────────────────────────
+
 class LatentGenesisCore(nn.Module):
     """
-    The Soul of Paradox: Quantum-Neural Genesis.
-    Fuses Classical Silicon Learning with Quantum Virtual Substrate Logic.
+    Paradox Genesis Core — the Quantum-Neural VAE.
+
+    Fuses classical deep learning with the Quantum Virtual Substrate (QVS)
+    to produce a phase-modulated reparameterization trick that encodes
+    latent space geometry into the QAU's Hilbert space.
+
+    Args:
+        latent_channels: Bottleneck depth; controls compression ratio.
+                         Compression = (H×W×3×4) / (H/8 × W/8 × latent_channels)
+                         e.g., 4ch on 32²: 12288 / 64 = 192× compression.
     """
-    def __init__(self, latent_channels: int = 4):
-        super(LatentGenesisCore, self).__init__()
+
+    def __init__(self, latent_channels: int = 4) -> None:
+        super().__init__()
         self.encoder = SemanticEncoder(latent_channels)
         self.decoder = GenesisDecoder(latent_channels)
-        self.qvs = QVS() # The Quantum Engine living inside the Neural Core
+        self.qvs = QVS()  # Quantum Engine living inside the Neural Core
 
-    def quantum_superposition(self, mu, logvar):
+    def quantum_superposition(
+        self, mu: torch.Tensor, logvar: torch.Tensor
+    ) -> torch.Tensor:
         """
-        Active Quantum Integration:
-        1. Encodes the 'Latent Energy' (mean) into the QVS.
-        2. Performs a Superposition + Collapse cycle to determine Phase Bias.
-        3. Modulates the neural manifold with the resulting Quantum Outcome.
+        QVS-modulated reparameterization trick.
+
+        During training, encodes each sample's mean latent intensity into a
+        4-state quantum basis, applies a phase WEAVE, and uses the COLLAPSE
+        outcome to determine a ±1 phase bias for the noise vector.
+
+        During inference, uses low-temperature noise (σ=0.1) for slight
+        stochastic diversity without distributional shift.
+
+        Args:
+            mu:     Latent mean,     shape (B, C, H, W).
+            logvar: Latent log-var,  shape (B, C, H, W).
+
+        Returns:
+            z: Reparameterized latent sample, same shape as mu.
         """
         batch_size = mu.shape[0]
         std = torch.exp(0.5 * logvar)
-        
+
         if self.training:
-            # We perform a Symbolic Quantum Measurement for each batch item
-            # to determine the 'Phase Weave' of the entire manifold.
             phase_biases = []
             for i in range(batch_size):
-                # Map the mean signal to a symbolic 4-state quantum basis
-                # (Representing 4 quadrants of the complex Hilbert space)
+                # Encode latent intensity into a 4-state quantum basis
+                # (representing the 4 quadrants of the complex Hilbert space)
                 asc_id = self.qvs.create_asc(size=2)
-                self.qvs.SUPERPOSE(asc_id, [(0,0), (0,1), (1,0), (1,1)])
-                
-                # Use the mean latent intensity to 'WEAVE' a phase shift
+                self.qvs.SUPERPOSE(asc_id, [(0, 0), (0, 1), (1, 0), (1, 1)])
+
+                # WEAVE a phase shift proportional to the mean latent energy
                 intensity = torch.mean(mu[i]).item()
                 self.qvs.WEAVE(asc_id, phase_angle=intensity * np.pi)
-                
-                # COLLAPSE the state to get a physical phase-outcome
+
+                # COLLAPSE to a binary outcome and map to ±1 bias
                 outcome = self.qvs.COLLAPSE(asc_id)
-                
-                # Map the binary outcome (e.g. (1,0)) back to a scalar bias
-                bias = 1.0 if sum(outcome) % 2 == 0 else -1.0
-                phase_biases.append(bias)
-                
-                # Cleanup quantum resources
+                phase_biases.append(1.0 if sum(outcome) % 2 == 0 else -1.0)
+
+                # Release quantum resources
                 self.qvs.delete_asc(asc_id)
-            
-            bias_tensor = torch.tensor(phase_biases, device=mu.device).view(batch_size, 1, 1, 1)
+
+            bias_tensor = torch.tensor(
+                phase_biases, dtype=torch.float32, device=mu.device
+            ).view(batch_size, 1, 1, 1)
             eps = torch.randn_like(std) * bias_tensor
         else:
-            # At inference: sample with low-temperature noise for diversity
+            # Inference: low-temperature sampling for smooth diversity
             eps = torch.randn_like(std) * 0.1
-            
+
         return mu + eps * std
 
-    def forward(self, x: torch.Tensor):
+    def forward(
+        self, x: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Full encode → reparameterize → quantize → decode pipeline.
+
+        Args:
+            x: Input image batch, shape (B, 3, H, W), values in [-1, 1].
+
+        Returns:
+            reconstructed: Decoded image,  shape (B, 3, H, W).
+            mu:            Latent mean,    shape (B, C, H/8, W/8).
+            logvar:        Latent log-var, shape (B, C, H/8, W/8).
+        """
         mu, logvar = self.encoder(x)
-        
-        # Transmuting Normal Latents into Quantum Superpositions
         z = self.quantum_superposition(mu, logvar)
-        
-        # Soft Quantization: Straight-Through Estimator with 8-bit precision
-        # Clamp latents to [-1, 1] first to prevent quantization explosion
+
+        # Soft 8-bit Quantization via Straight-Through Estimator.
+        # Clamp to [-1, 1] first to prevent quantization overflow.
         z_clamped = torch.clamp(z, -1.0, 1.0)
-        z = z_clamped + (torch.round(z_clamped * 127.5) / 127.5 - z_clamped).detach()
-        
-        reconstructed = self.decoder(z)
+        z_q = z_clamped + (torch.round(z_clamped * 127.5) / 127.5 - z_clamped).detach()
+
+        reconstructed = self.decoder(z_q)
         return reconstructed, mu, logvar
