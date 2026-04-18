@@ -118,7 +118,14 @@ class QVS:
         asc = self.get_asc(asc_id) # Triggers JIT flush
         states = list(asc.amplitudes.keys())
         p = np.array([abs(asc.amplitudes[s])**2 for s in states])
-        p /= p.sum()
+        
+        # --- Paradox Safety Protocol 1.1 ---
+        # Handle NaNs or all-zero amplitudes gracefully
+        if np.any(np.isnan(p)) or p.sum() <= 0:
+            p = np.ones_like(p) / len(p)
+        else:
+            p /= p.sum()
+            
         idx = np.random.choice(len(states), p=p)
         outcome = states[idx]
         asc.amplitudes = {outcome: 1.0 + 0j}

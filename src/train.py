@@ -93,7 +93,11 @@ def ssim_loss(x, y, window_size: int = 11):
 def compression_loss(recon_x, x, mu, logvar, kld_weight=0.001, perc_model=None):
     l1_l   = F.l1_loss(recon_x, x)
     ssim_l = ssim_loss(recon_x, x)
-    kld_l  = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    
+    # --- Paradox Safety Protocol 1.1 ---
+    # Clamp logvar to prevent KLD explosion (e^10 is ~22k, enough for variance)
+    logvar_c = torch.clamp(logvar, -10, 10)
+    kld_l  = -0.5 * torch.mean(1 + logvar_c - mu.pow(2) - logvar_c.exp())
     
     perc_l = torch.tensor(0.0, device=x.device)
     if perc_model is not None:
@@ -168,7 +172,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Paradox Master Training")
     parser.add_argument("--batch_size", type=int, default=16) # Optimized for T4 VRAM
     parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=2e-4) # Lowered for ELITE stability
     parser.add_argument("--latent_channels", type=int, default=16)
     parser.add_argument("--sample_limit", type=int, default=5000) # Speed/GENERALIZATION balance
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
