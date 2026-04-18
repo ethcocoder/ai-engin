@@ -42,14 +42,14 @@ def train_hd(args):
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     
-    log.info("\n[*] Executing HD Synthesis. Capturing high-frequency textures...")
+    log.info("\n[*] Executing ELITE HD Synthesis. Capturing high-frequency textures...")
     
     for epoch in range(args.epochs):
         model.train()
         running_loss = 0.0
         
-        # We ramp KLD slowly to prioritize texture learning first
-        kld_weight = min(1.0, epoch / max(1, args.epochs // 4)) * 0.005
+        # Lower KLD pressure (0.001) lets the model focus on ELITE quality
+        kld_weight = min(1.0, epoch / max(1, args.epochs // 2)) * 0.001
         
         for images, _ in loader:
             images = images.to(device)
@@ -81,9 +81,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Paradox HD Engine Training")
     parser.add_argument('--image_dir', type=str, default='hd_images')
     parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--epochs', type=int, default=150) # HD textures take longer to learn
+    parser.add_argument('--epochs', type=int, default=500) # Increased for Elite Sharpness
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--latent_channels', type=int, default=8) # 8+ recommended for HD
+    parser.add_argument('--latent_channels', type=int, default=16) # 16 for Elite HD
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
     args = parser.parse_args()
     

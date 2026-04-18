@@ -100,6 +100,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', type=str, required=True)
     parser.add_argument('--image_dir', type=str, default='hd_images')
-    parser.add_argument('--latent_channels', type=int, default=8)
+    parser.add_argument('--latent_channels', type=int, default=16)
     args = parser.parse_args()
     run_hd_simulation(args)

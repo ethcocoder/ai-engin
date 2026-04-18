@@ -73,7 +73,7 @@ class SemanticEncoder(nn.Module):
     Output shape: (mu, logvar) each of shape (B, latent_channels, H/8, W/8)
     """
 
-    def __init__(self, latent_channels: int = 4) -> None:
+    def __init__(self, latent_channels: int = 16) -> None:
         super().__init__()
         self.layers = nn.Sequential(
             # 3 → 32 ch, spatial /2
@@ -126,7 +126,7 @@ class GenesisDecoder(nn.Module):
     Output shape: (B, 3, H, W) with values in [-1, 1]
     """
 
-    def __init__(self, latent_channels: int = 4) -> None:
+    def __init__(self, latent_channels: int = 16) -> None:
         super().__init__()
         # Expand latent to rich 256-channel manifold
         self.expand = nn.Sequential(
@@ -135,6 +135,8 @@ class GenesisDecoder(nn.Module):
             nn.ReLU(inplace=True),
             ResBlock(256),
             ResBlock(256),
+            ResBlock(256),  # Extra capacity for Elite HD
+            ResBlock(256),  # Extra capacity for Elite HD
         )
         # 256ch → PixelShuffle(2) → 64ch, spatial ×2
         self.up1 = nn.Sequential(
@@ -216,7 +218,7 @@ class LatentGenesisCore(nn.Module):
         Native (32x32x3x4 bytes) vs Compressed (16x16xLatent x 1 byte)
     """
 
-    def __init__(self, latent_channels: int = 4) -> None:
+    def __init__(self, latent_channels: int = 16) -> None:
         super().__init__()
         self.encoder = SemanticEncoder(latent_channels)
         self.decoder = GenesisDecoder(latent_channels)
