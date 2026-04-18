@@ -11,14 +11,16 @@ than CIFAR-10, allowing the model to learn universal textures.
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from typing import Tuple
+from typing import Tuple, Optional
+import torch
 
 def get_dataloaders(
     batch_size: int = 128,
     root: str = "./data",
     num_workers: int = 4,
     pin_memory: bool = True,
-    use_hd: bool = True  # New flag for Universal HD training
+    use_hd: bool = True,
+    sample_limit: Optional[int] = None
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Build and return DataLoaders. 
@@ -42,13 +44,14 @@ def get_dataloaders(
     ])
 
     if use_hd:
-        # STL-10 Unlabeled is the gold standard for learning patterns
-        trainset = torchvision.datasets.STL10(
-            root=root, split='unlabeled', download=True, transform=train_transform
-        )
-        testset = torchvision.datasets.STL10(
-            root=root, split='test', download=True, transform=test_transform
-        )
+        trainset = torchvision.datasets.STL10(root=root, split='unlabeled', download=True, transform=train_transform)
+        testset = torchvision.datasets.STL10(root=root, split='test', download=True, transform=test_transform)
+        
+        # Fast-Pattern Logic: Subset the 100k images
+        if sample_limit and sample_limit < len(trainset):
+            import torch.utils.data as data
+            indices = torch.randperm(len(trainset))[:sample_limit]
+            trainset = data.Subset(trainset, indices)
     else:
         trainset = torchvision.datasets.CIFAR10(
             root=root, train=True, download=True, transform=train_transform

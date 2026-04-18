@@ -112,11 +112,11 @@ def train(args):
 
     torch.backends.cudnn.benchmark = True
 
-    # 1. Universal Data Loader (100,000 HD-base images)
-    # Batch size 16 is the 'Sweet Spot' for T4 GPU VRAM
+    # 1. Universal Data Loader (Sampled for Speed)
     trainloader, testloader = get_dataloaders(
         batch_size=args.batch_size, root="./data", num_workers=2,
-        pin_memory=(device.type == "cuda"), use_hd=args.use_hd
+        pin_memory=(device.type == "cuda"), use_hd=args.use_hd,
+        sample_limit=args.sample_limit
     )
 
     # 2. Elite 16-channel Core
@@ -170,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--latent_channels", type=int, default=16)
+    parser.add_argument("--sample_limit", type=int, default=5000) # Speed/GENERALIZATION balance
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
     parser.add_argument("--use_hd", type=bool, default=True) # Always HD-Ready patterns
     args = parser.parse_args()
