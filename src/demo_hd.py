@@ -87,7 +87,7 @@ def run_hd_simulation(args):
     print(f"[*] Average Generalization PSNR: {avg_psnr:.2f} dB")
     print("----------------------------\n")
 
-    fig, axes = plt.subplots(2, len(images), figsize=(20, 10))
+    fig, axes = plt.subplots(2, len(images), figsize=(20, 10), squeeze=False)
     fig.suptitle(f"Universal HD Engine: {compression_ratio:.1f}x Reduction | Generalization PSNR: {avg_psnr:.2f}dB", fontsize=20)
 
     for i in range(len(images)):
