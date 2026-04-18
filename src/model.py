@@ -91,9 +91,14 @@ class SemanticEncoder(nn.Module):
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             ResBlock(128),
+            # 128 → 256 ch, spatial /2 [New HD Stage]
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            ResBlock(256),
         )
-        self.mu     = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
-        self.logvar = nn.Conv2d(128, latent_channels, kernel_size=3, padding=1)
+        self.mu     = nn.Conv2d(256, latent_channels, kernel_size=3, padding=1)
+        self.logvar = nn.Conv2d(256, latent_channels, kernel_size=3, padding=1)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         h = self.layers(x)
@@ -147,8 +152,16 @@ class GenesisDecoder(nn.Module):
             nn.ReLU(inplace=True),
             ResBlock(64),
         )
-        # 64ch → 48ch → PixelShuffle(2) → 12ch → 3ch, spatial ×2
+        # 64ch → 256ch → PixelShuffle(2) → 64ch, spatial ×2
         self.up3 = nn.Sequential(
+            nn.Conv2d(64, 256, kernel_size=3, padding=1, bias=False),
+            nn.PixelShuffle(2),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            ResBlock(64),
+        )
+        # 64ch → 48ch → PixelShuffle(2) → 12ch → 3ch, spatial ×2
+        self.up4 = nn.Sequential(
             nn.Conv2d(64, 48, kernel_size=3, padding=1, bias=False),
             nn.PixelShuffle(2),
             nn.BatchNorm2d(12),
@@ -162,6 +175,7 @@ class GenesisDecoder(nn.Module):
         x = self.up1(x)
         x = self.up2(x)
         x = self.up3(x)
+        x = self.up4(x)
         return x
 
 
@@ -177,8 +191,8 @@ class LatentGenesisCore(nn.Module):
 
     Args:
         latent_channels: Bottleneck depth; controls compression ratio.
-                         Compression = (H×W×3×4) / (H/8 × W/8 × latent_channels)
-                         e.g., 4ch on 32²: 12288 / 64 = 192× compression.
+                         Compression = (H×W×3) / (H/16 × W/16 × latent_channels × 1 byte)
+                         e.g., 8ch on 256²: 196608 / 2048 = 96× compression.
     """
 
     def __init__(self, latent_channels: int = 4) -> None:
@@ -250,8 +264,8 @@ class LatentGenesisCore(nn.Module):
 
         Returns:
             reconstructed: Decoded image,  shape (B, 3, H, W).
-            mu:            Latent mean,    shape (B, C, H/8, W/8).
-            logvar:        Latent log-var, shape (B, C, H/8, W/8).
+            mu:            Latent mean,    shape (B, C, H/16, W/16).
+            logvar:        Latent log-var, shape (B, C, H/16, W/16).
         """
         mu, logvar = self.encoder(x)
         z = self.quantum_superposition(mu, logvar)

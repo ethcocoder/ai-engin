@@ -17,12 +17,42 @@ import logging
 from typing import Tuple
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision.models as models
 from tqdm import tqdm
 
 from data import get_dataloaders
 from model import LatentGenesisCore
+
+# ─── Perceptual Loss (VGG) ──────────────────────────────────────────────────
+class PerceptualLoss(nn.Module):
+    """
+    Uses a pre-trained VGG16 to compare deep features of images.
+    Forces the model to ensure 'textures' and 'meaningful features' match
+    the original HD images, preventing the common 'plastic/blurry' look.
+    """
+    def __init__(self):
+        super().__init__()
+        vgg = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1).features
+        self.slice1 = nn.Sequential(*vgg[:4])   # Relu1_2
+        self.slice2 = nn.Sequential(*vgg[4:9])  # Relu2_2
+        self.slice3 = nn.Sequential(*vgg[9:16]) # Relu3_3
+        for param in self.parameters():
+            param.requires_grad = False
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
+    def forward(self, x, y):
+        # Normalize from [-1, 1] (Tanh) to ImageNet stats
+        x = (x * 0.5 + 0.5 - self.mean) / self.std
+        y = (y * 0.5 + 0.5 - self.mean) / self.std
+        
+        x_f1, y_f1 = self.slice1(x), self.slice1(y)
+        x_f2, y_f2 = self.slice2(x), self.slice2(y)
+        x_f3, y_f3 = self.slice3(x), self.slice3(y)
+        return F.mse_loss(x_f1, y_f1) + F.mse_loss(x_f2, y_f2) + F.mse_loss(x_f3, y_f3)
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -94,31 +124,29 @@ def compression_loss(
     mu: torch.Tensor,
     logvar: torch.Tensor,
     kld_weight: float = 0.01,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    perc_model: Optional[PerceptualLoss] = None,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Paradox Generative Loss — fuses pixel fidelity, perceptual structure,
-    and information-theoretic entropy pressure.
+    conceptual texture matching, and information-theoretic entropy pressure.
 
     Components:
-        L1   — per-pixel absolute error; sparse gradients preserve sharp edges.
-        SSIM — structural similarity; penalises blur and texture loss.
-        KLD  — KL divergence; regularises the latent space toward N(0, I).
-
-    Args:
-        recon_x:    Reconstructed image batch.
-        x:          Original image batch.
-        mu:         Latent mean from the encoder.
-        logvar:     Latent log-variance from the encoder.
-        kld_weight: Annealed weight applied to the KLD term.
-
-    Returns:
-        (total_loss, l1, ssim_l, kld) — individual terms for logging.
+        L1    — per-pixel absolute error; sparse gradients preserve sharp edges.
+        SSIM  — structural similarity; penalises blur and texture loss.
+        PERC  — perceptual feature matching; ensures realistic high-res texture.
+        KLD   — KL divergence; regularises the latent space toward N(0, I).
     """
     l1_l   = F.l1_loss(recon_x, x)
     ssim_l = ssim_loss(recon_x, x)
     kld_l  = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-    total  = l1_l + (0.5 * ssim_l) + (kld_weight * kld_l)
-    return total, l1_l, ssim_l, kld_l
+    
+    perc_l = torch.tensor(0.0, device=x.device)
+    if perc_model is not None:
+        perc_l = perc_model(recon_x, x)
+
+    # Balanced weighting: pixel + structure + texture + entropy
+    total = l1_l + (0.5 * ssim_l) + (0.1 * perc_l) + (kld_weight * kld_l)
+    return total, l1_l, ssim_l, perc_l, kld_l
 
 
 # ── Training Loop ─────────────────────────────────────────────────────────────
@@ -144,6 +172,10 @@ def train(args: argparse.Namespace) -> None:
     )
 
     model = LatentGenesisCore(latent_channels=args.latent_channels).to(device)
+    
+    # Initialize Perceptual Model for HD-Ready training
+    perc_model = PerceptualLoss().to(device)
+    
     param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log.info("Model parameters: %s", f"{param_count:,}")
 
@@ -174,8 +206,8 @@ def train(args: argparse.Namespace) -> None:
             optimizer.zero_grad(set_to_none=True)  # Slightly faster than zero_grad()
 
             outputs, mu, logvar = model(images)
-            loss, l1_l, ssim_l, kld_l = compression_loss(
-                outputs, images, mu, logvar, kld_weight
+            loss, l1_l, ssim_l, perc_l, kld_l = compression_loss(
+                outputs, images, mu, logvar, kld_weight, perc_model
             )
             loss.backward()
 
@@ -186,8 +218,8 @@ def train(args: argparse.Namespace) -> None:
             running_loss += loss.item()
             pbar.set_postfix(
                 loss=f"{loss.item():.4f}",
-                l1=f"{l1_l.item():.4f}",
                 ssim=f"{ssim_l.item():.4f}",
+                perc=f"{perc_l.item():.4f}",
                 kld_w=f"{kld_weight:.3f}",
             )
 
@@ -202,7 +234,7 @@ def train(args: argparse.Namespace) -> None:
                 val_images = val_images.to(device, non_blocking=True)
                 val_outputs, val_mu, val_logvar = model(val_images)
                 v_loss, *_ = compression_loss(
-                    val_outputs, val_images, val_mu, val_logvar, kld_weight
+                    val_outputs, val_images, val_mu, val_logvar, kld_weight, perc_model
                 )
                 val_loss += v_loss.item()
 

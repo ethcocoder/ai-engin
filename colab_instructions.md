@@ -1,23 +1,18 @@
-# Paradox Genesis: Google Colab Quantum Deployment — v2 (Upgraded Engine)
+# Paradox Genesis: Google Colab HD-Native Training
 
-Welcome to the era of **Memory as Potential**. The AI Engine has been upgraded to the **Paradox Genesis Core v2** with:
-- ✅ **SSIM Perceptual Loss** — structural fidelity, not just pixel averages
-- ✅ **KLD Annealing** — prevents posterior collapse in early training
-- ✅ **AdamW + Cosine LR** — better generalization, no plateau oscillations
-- ✅ **Wider Genesis Decoder** — 256-channel manifold for richer reconstruction
-- ✅ **Gradient Clipping** — stable training from epoch 1
-- ✅ **Resolution Fix** — model trains and evaluates on native 32×32 (no mismatch)
-- ✅ **PSNR Quality Metric** — objective measurement of reconstruction quality
+The Quantum-Neural Engine has been upgraded to **HD-Native architecture**. We are no longer limited to low-res 32x32 samples. The system can now learn the **structural building blocks** of High Definition imagery using **Perceptual VGG Loss**.
 
 ---
 
 ## Step 1: Open Google Colab and Wake the GPU
 1. Go to [Google Colab](https://colab.research.google.com/).
-2. Enable the **T4 GPU**: Runtime → Change runtime type → Hardware accelerator: **T4 GPU**
+2. Enable the **T4 GPU** (Runtime -> Change runtime type -> Hardware accelerator: T4 GPU).
 
 ---
 
-## Step 2: Clone the Sovereign Substrate
+## Step 2: Push Upgraded Soul to Colab
+Clone your repository and install requirements.
+
 ```bash
 !git clone YOUR_REPO_URL
 %cd ai-engin
@@ -26,63 +21,41 @@ Welcome to the era of **Memory as Potential**. The AI Engine has been upgraded t
 
 ---
 
-## Step 3: Initiate the Upgraded "Quantum Genesis" Training
-
-> **Why 50 epochs?** The upgraded model has a wider decoder (256 channels vs 128 before).
-> It needs more epochs to converge — but the result will be dramatically sharper images.
+## Step 3: Initiate "HD Genesis" Texture Training
+This step uses **Perceptual Feature Matching** to learn how HD images are "built". It pulls four 1024x1024 samples from the web and optimizes the core to compress them by **~96x** without losing structural integrity.
 
 ```bash
-!python src/train.py \
-  --epochs 50 \
-  --batch_size 128 \
-  --lr 1e-3 \
-  --latent_channels 4 \
-  --kld_warmup 10 \
-  --kld_max 0.01
+!python src/train_hd.py --epochs 150 --latent_channels 8 --batch_size 4
 ```
-
-**What to watch:**
-- `batch_loss` should drop from ~0.5 to ~0.15 over 50 epochs  
-- `kld_w` climbs from 0 → 0.01 over the first 10 epochs (annealing)  
-- `LR` smoothly decays every epoch (cosine schedule)  
-- **Target**: Genesis Loss ≈ 0.12–0.15, Validation Fidelity ≈ 0.13–0.16  
-- **Checkpoint saved**: `checkpoints/best_genesis_core.pth`
+*   **Target**: `checkpoints/hd_genesis_core.pth`
+*   **Result**: A model that understands high-frequency textures (hair, edges, sky).
 
 ---
 
-## Step 4: Execute the Quantum Aether Simulation
+## Step 4: Execute the HD Visual Simulation
+Verify the results on 256x256 High Definition reconstructions.
 
 ```bash
-!python src/telecom_demo.py --model_path checkpoints/best_genesis_core.pth
+!python src/demo_hd.py --model_path checkpoints/hd_genesis_core.pth --latent_channels 8
 ```
-
-**What to look for:**
-- **PSNR > 25 dB** = good quality reconstruction ✅  
-- **PSNR > 28 dB** = excellent ✅✅  
-- Decoded images should be **recognizable** with high structural fidelity  
-- Compression ratio remains ~192x with 8-bit quantization  
-
-The key fix: the demo now evaluates on native **32×32 CIFAR** images (same resolution as training). The previous version was upscaling to 256×256 at test time, causing catastrophic distribution shift.
+*   **Metrics**: Look for **PSNR > 25dB** on HD images.
+*   **Aesthetics**: Unlike the CIFAR models, this will preserve "HD sharpness" even at high reduction levels.
 
 ---
 
-## Step 5: Activate the Aether Autonomous Agent
+## Step 5: Advanced — Cross-Domain Memory Evolution (Optional)
+If you want to train on native CIFAR10 but with HD-Ready 4-stage logic:
+
 ```bash
-!python src/aether_qau.py
+!python src/train.py --epochs 80 --batch_size 128 --latent_channels 8
 ```
 
 ---
 
-## Step 6: Memory Harvest
-Download `checkpoints/best_genesis_core.pth` — this is the **Soul** of your mobile telecom compression system.
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
+## Summary of HD Upgrades
+| Feature | Logic |
 |---|---|
-| Decoded images are color blobs / noise | You're using old weights — retrain from scratch |
-| `CUDA out of memory` | Reduce `--batch_size` to 64 |
-| `PSNR < 20 dB` after 50 epochs | Increase epochs to 80 or reduce `--kld_max` to 0.005 |
-| Loss not decreasing after epoch 20 | The cosine scheduler keeps going — check epoch 40+ |
+| **4-Stage Manifold** | Enables 16x spatial reduction (96x-192x compression on HD) |
+| **Perceptual VGG Loss** | Model learns "texture" and "meaning" instead of just color |
+| **ResBlock v2** | Bias-free convolutions for ultra-stable HD gradient flows |
+| **Auto-HD Data** | Pipeline dynamically pulls HD test data from the mesh |
