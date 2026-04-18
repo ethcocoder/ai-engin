@@ -49,9 +49,11 @@ class PerceptualLoss(nn.Module):
         x = (x * 0.5 + 0.5 - self.mean) / self.std
         y = (y * 0.5 + 0.5 - self.mean) / self.std
         
+        # Chain the features through the VGG slices
         x_f1, y_f1 = self.slice1(x), self.slice1(y)
-        x_f2, y_f2 = self.slice2(x), self.slice2(y)
-        x_f3, y_f3 = self.slice3(x), self.slice3(y)
+        x_f2, y_f2 = self.slice2(x_f1), self.slice2(y_f1)
+        x_f3, y_f3 = self.slice3(x_f2), self.slice3(y_f2)
+        
         return F.mse_loss(x_f1, y_f1) + F.mse_loss(x_f2, y_f2) + F.mse_loss(x_f3, y_f3)
 
 # ── Logging ──────────────────────────────────────────────────────────────────
