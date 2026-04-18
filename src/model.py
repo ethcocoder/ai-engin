@@ -179,6 +179,29 @@ class GenesisDecoder(nn.Module):
         return x
 
 
+# ── Quantizer ───────────────────────────────────────────────────────────────
+
+class SovereignQuantizer(nn.Module):
+    """
+    Paradox Sovereign Quantizer — the 8-bit bottleneck logic.
+
+    Uses a Straight-Through Estimator (STE) to allow gradients to flow past the
+    non-differentiable rounding operation. This enables the model to 'learn'
+    a representation that is natively robust to 8-bit quantization.
+
+    Args:
+        levels: Number of steps (127.5 for 8-bit [-1, 1]).
+    """
+    def __init__(self, levels: float = 127.5) -> None:
+        super().__init__()
+        self.levels = levels
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Straight-Through Estimator: round in forward, identity in backward
+        x_clamped = torch.clamp(x, -1.0, 1.0)
+        return x_clamped + (torch.round(x_clamped * self.levels) / self.levels - x_clamped).detach()
+
+
 # ── Full Model ───────────────────────────────────────────────────────────────
 
 class LatentGenesisCore(nn.Module):
@@ -189,16 +212,15 @@ class LatentGenesisCore(nn.Module):
     to produce a phase-modulated reparameterization trick that encodes
     latent space geometry into the QAU's Hilbert space.
 
-    Args:
-        latent_channels: Bottleneck depth; controls compression ratio.
-                         Compression = (H×W×3) / (H/16 × W/16 × latent_channels × 1 byte)
-                         e.g., 8ch on 256²: 196608 / 2048 = 96× compression.
+    Compression Efficiency:
+        Native (32x32x3x4 bytes) vs Compressed (16x16xLatent x 1 byte)
     """
 
     def __init__(self, latent_channels: int = 4) -> None:
         super().__init__()
         self.encoder = SemanticEncoder(latent_channels)
         self.decoder = GenesisDecoder(latent_channels)
+        self.quantizer = SovereignQuantizer() # The 'Compression' gate
         self.qvs = QVS()  # Quantum Engine living inside the Neural Core
 
     def quantum_superposition(
@@ -270,10 +292,8 @@ class LatentGenesisCore(nn.Module):
         mu, logvar = self.encoder(x)
         z = self.quantum_superposition(mu, logvar)
 
-        # Soft 8-bit Quantization via Straight-Through Estimator.
-        # Clamp to [-1, 1] first to prevent quantization overflow.
-        z_clamped = torch.clamp(z, -1.0, 1.0)
-        z_q = z_clamped + (torch.round(z_clamped * 127.5) / 127.5 - z_clamped).detach()
+        # Apply 8-bit Sovereign Quantization (Compression Logic)
+        z_q = self.quantizer(z)
 
         reconstructed = self.decoder(z_q)
         return reconstructed, mu, logvar
