@@ -19,7 +19,7 @@ Clone the repository and install dependencies in a T4 GPU runtime.
 This path trains the model on **100,000 different images** from the STL-10 dataset. It teaches the AI the "Visual Grammar" of the world so it can handle any random HD image it has never seen.
 
 ```bash
-!python src/train.py --epochs 50 --batch_size 64 --latent_channels 16
+!python src/train.py --epochs 50 --batch_size 16 --latent_channels 16
 ```
 *   **Result**: `universal_genesis_core.pth` (Generalizes to any image).
 

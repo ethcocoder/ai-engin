@@ -113,8 +113,9 @@ def train(args):
     torch.backends.cudnn.benchmark = True
 
     # 1. Universal Data Loader (100,000 HD-base images)
+    # Batch size 16 is the 'Sweet Spot' for T4 GPU VRAM
     trainloader, testloader = get_dataloaders(
-        batch_size=args.batch_size, root="./data", num_workers=4,
+        batch_size=args.batch_size, root="./data", num_workers=2,
         pin_memory=(device.type == "cuda"), use_hd=args.use_hd
     )
 
@@ -165,7 +166,7 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Paradox Master Training")
-    parser.add_argument("--batch_size", type=int, default=64) # Reduced for HD processing
+    parser.add_argument("--batch_size", type=int, default=16) # Optimized for T4 VRAM
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--latent_channels", type=int, default=16)
