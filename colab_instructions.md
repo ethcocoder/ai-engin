@@ -8,7 +8,7 @@ The Quantum-Neural Engine is now capable of **True Generalization**. You can cho
 Clone the repository and install dependencies in a T4 GPU runtime.
 
 ```bash
-!git clone YOUR_REPO_URL; %cd ai-engin; !pip install -r requirements.txt
+!git clone https://github.com/ethcocoder/ai-engin-v2.git; %cd ai-engin; !pip install -r requirements.txt
 ```
 
 ---
@@ -16,12 +16,14 @@ Clone the repository and install dependencies in a T4 GPU runtime.
 ## Step 2: Choose Your Training Path
 
 ### Path A: Build the "Universal Master" (Real Product)
+
 This path trains the model on **100,000 different images** from the STL-10 dataset. It teaches the AI the "Visual Grammar" of the world so it can handle any random HD image it has never seen.
 
+
 ```bash
-!python src/train.py --epochs 50 --batch_size 16 --latent_channels 16
+         !python src/train.py --epochs 50 --batch_size 16 --latent_channels 16
 ```
-*   **Result**: `universal_genesis_core.pth` (Generalizes to any image).
+***Result**: `universal_genesis_core.pth` (Generalizes to any image).
 
 ### Path B: Build the "Rapid Overfit" (Perfect Demo)
 This path trains the model to memorize 4 specific HD images flawlessly. Use this for high PSNR screenshots and demonstrating the absolute spatial capacity of the manifold.
@@ -29,9 +31,8 @@ This path trains the model to memorize 4 specific HD images flawlessly. Use this
 ```bash
 !python src/train_hd.py --epochs 500 --latent_channels 16
 ```
-*   **Result**: `hd_genesis_core.pth` (Overfitted for a perfect 1080p demo).
+***Result**: `hd_genesis_core.pth` (Overfitted for a perfect 1080p demo).
 
----
 
 ## Step 3: The Ultimate Test (Generalization Check)
 To prove that your product is not just memorizing, run the demo with the `--random` flag. It will pull fresh random HD images from the internet and test if the AI knows their patterns.
